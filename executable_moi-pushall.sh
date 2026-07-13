@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -ne 2 || "$1" != "-m" || -z "$2" ]]; then
-    echo "Usage: chezmoi pushall -m \"commit message\""
+    echo 'Usage: chezmoi-pushall -m "commit message"'
     exit 1
 fi
 
@@ -17,45 +17,71 @@ fi
 
 cd "$SOURCE_DIR"
 
-push_submodule=false
+
+check_untracked()
+{
+    if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+        echo "ERROR: untracked files found in $(pwd)"
+        git ls-files --others --exclude-standard
+        exit 1
+    fi
+}
+
+
+push_if_ahead()
+{
+    local ahead
+
+    ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+
+    if [[ "$ahead" -gt 0 ]]; then
+        echo "Pushing $ahead commit(s) from $(pwd)"
+        git push
+    else
+        echo "No commits to push from $(pwd)"
+    fi
+}
+
 
 echo "== Checking submodules =="
 
 git submodule foreach --recursive '
+    echo "--- $name ---"
+
+    if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+        echo "ERROR: untracked files in submodule: $name"
+        git ls-files --others --exclude-standard
+        exit 1
+    fi
+
     if [[ -n "$(git status --porcelain)" ]]; then
-        echo "Changed submodule: $name"
-
+        echo "Committing changes in submodule: $name"
         git add .
-
         git commit -m "'"$MESSAGE"'"
+    fi
+
+    ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+
+    if [[ "$ahead" -gt 0 ]]; then
+        echo "Pushing submodule: $name ($ahead commit(s))"
         git push
-
-        exit 10
-    fi
-' || {
-    rc=$?
-    if [[ $rc -eq 10 ]]; then
-        push_submodule=true
     else
-        exit $rc
+        echo "Submodule up to date: $name"
     fi
-}
-
-if [[ "$push_submodule" == false ]]; then
-    echo "No submodule changes to push"
-fi
+'
 
 
-echo "== Checking chezmoi source repository =="
+echo "== Checking parent chezmoi repository =="
+
+check_untracked
 
 if [[ -n "$(git status --porcelain)" ]]; then
-    echo "Changes detected in chezmoi source repository"
-
+    echo "Committing changes in chezmoi source repository"
     git add .
     git commit -m "$MESSAGE"
-    git push
-else
-    echo "No chezmoi source changes to push"
 fi
+
+push_if_ahead
+
 
 echo "Done"
