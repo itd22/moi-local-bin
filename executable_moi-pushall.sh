@@ -84,11 +84,12 @@ create_push_tag()
         return 0
     fi
 
-    echo "Creating tag '$TAG' in $repo"
+    echo "Creating annotated tag '$TAG' in $repo"
 
-    git tag "$TAG"
+    git tag -a "$TAG" -m "$MESSAGE"
 
     echo "Pushing tag '$TAG'"
+
     git push origin "refs/tags/$TAG"
 }
 
@@ -116,7 +117,7 @@ process_repo()
     local repo="$1"
 
     echo
-    echo "== $repo =="
+    echo "== Processing $repo =="
 
     check_untracked "$repo"
 
@@ -125,18 +126,29 @@ process_repo()
 
         git add .
 
-        git commit \
-            -m "$MESSAGE"
+        git commit -m "$MESSAGE"
     else
         echo "No changes to commit in $repo"
     fi
 
+
     if push_if_ahead "$repo"; then
         create_push_tag "$repo"
     else
-        echo "No push performed, no new commits"
+        echo "No push required for $repo"
     fi
 }
+
+
+# Export variables/functions for git submodule foreach shell
+export MESSAGE
+export TAG
+
+export -f check_untracked
+export -f tag_exists
+export -f create_push_tag
+export -f push_if_ahead
+export -f process_repo
 
 
 cd "$SOURCE_DIR"
@@ -150,7 +162,7 @@ git submodule foreach --recursive '
 
 
 echo
-echo "== Processing chezmoi source repository =="
+echo "== Processing parent chezmoi repository =="
 
 process_repo "parent chezmoi repository"
 
@@ -159,10 +171,10 @@ echo
 echo "== Tag summary =="
 
 if [[ ${#TAG_MISSING[@]} -gt 0 ]]; then
-    echo "Tag '$TAG' was already present in:"
+    echo "Tag '$TAG' already existed in:"
     printf " - %s\n" "${TAG_MISSING[@]}"
 elif [[ -n "$TAG" ]]; then
-    echo "Tag '$TAG' created and pushed successfully everywhere"
+    echo "Tag '$TAG' created and pushed successfully"
 fi
 
 
