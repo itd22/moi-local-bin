@@ -6,7 +6,7 @@ TAG=""
 
 usage()
 {
-    echo 'Usage: moi-pushall.sh -m "commit message" [-t tag]'
+    echo 'Usage: moi-pushall.sh -m "message" [-t tag]'
     exit 1
 }
 
@@ -39,9 +39,6 @@ if [[ ! -d "$SOURCE_DIR/.git" ]]; then
 fi
 
 
-TAG_MISSING=()
-
-
 check_untracked()
 {
     local repo="$1"
@@ -59,36 +56,31 @@ tag_exists()
 {
     local tag="$1"
 
-    if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
-        return 0
-    fi
+    git rev-parse "refs/tags/$tag" >/dev/null 2>&1 && return 0
 
-    if git ls-remote --exit-code --tags origin \
-        "refs/tags/$tag" >/dev/null 2>&1; then
-        return 0
-    fi
+    git ls-remote --exit-code --tags origin \
+        "refs/tags/$tag" >/dev/null 2>&1 && return 0
 
     return 1
 }
 
 
-create_push_tag()
+apply_tag()
 {
     local repo="$1"
 
     [[ -z "$TAG" ]] && return 0
 
     if tag_exists "$TAG"; then
-        echo "WARNING: tag '$TAG' already exists in $repo"
-        TAG_MISSING+=("$repo")
+        echo "Tag '$TAG' already exists in $repo"
         return 0
     fi
 
-    echo "Creating annotated tag '$TAG' in $repo"
+    echo "Creating tag '$TAG' in $repo"
 
     git tag -a "$TAG" -m "$MESSAGE"
 
-    echo "Pushing tag '$TAG'"
+    echo "Pushing tag '$TAG' in $repo"
 
     git push origin "refs/tags/$TAG"
 }
@@ -104,11 +96,9 @@ push_if_ahead()
     if [[ "$ahead" -gt 0 ]]; then
         echo "Pushing $ahead commit(s) from $repo"
         git push
-        return 0
+    else
+        echo "No commits to push from $repo"
     fi
-
-    echo "No commits to push from $repo"
-    return 1
 }
 
 
@@ -117,36 +107,36 @@ process_repo()
     local repo="$1"
 
     echo
-    echo "== Processing $repo =="
+    echo "===== $repo ====="
 
     check_untracked "$repo"
+
 
     if [[ -n "$(git status --porcelain)" ]]; then
         echo "Committing changes in $repo"
 
         git add .
-
         git commit -m "$MESSAGE"
     else
         echo "No changes to commit in $repo"
     fi
 
 
-    if push_if_ahead "$repo"; then
-        create_push_tag "$repo"
-    else
-        echo "No push required for $repo"
+    push_if_ahead "$repo"
+
+
+    if [[ -n "$TAG" ]]; then
+        apply_tag "$repo"
     fi
 }
 
 
-# Export variables/functions for git submodule foreach shell
 export MESSAGE
 export TAG
 
 export -f check_untracked
 export -f tag_exists
-export -f create_push_tag
+export -f apply_tag
 export -f push_if_ahead
 export -f process_repo
 
@@ -154,7 +144,7 @@ export -f process_repo
 cd "$SOURCE_DIR"
 
 
-echo "== Processing submodules =="
+echo "===== Processing submodules ====="
 
 git submodule foreach --recursive '
     process_repo "$name"
@@ -162,20 +152,9 @@ git submodule foreach --recursive '
 
 
 echo
-echo "== Processing parent chezmoi repository =="
+echo "===== Processing parent repository ====="
 
 process_repo "parent chezmoi repository"
-
-
-echo
-echo "== Tag summary =="
-
-if [[ ${#TAG_MISSING[@]} -gt 0 ]]; then
-    echo "Tag '$TAG' already existed in:"
-    printf " - %s\n" "${TAG_MISSING[@]}"
-elif [[ -n "$TAG" ]]; then
-    echo "Tag '$TAG' created and pushed successfully"
-fi
 
 
 echo
