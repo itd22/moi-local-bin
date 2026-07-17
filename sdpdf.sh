@@ -46,6 +46,22 @@ pdf-expand-linearize-all() {
   fi
 }
 
+
+pdf-sanitize-all() {
+  local print_time="${2:-false}" # Default to false if not provided
+  local start_time=$SECONDS
+
+  parallel -j+0    /bin/python $HOME/tools/pdfpz/pdf_sanitize.py {} ::: *-linearized.pdf || return
+
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
+
+
 qpdfc() {
   [[ $# -lt 2 ]] && {
     echo "Usage: qpdfc <input.pdf> <pages...>"
