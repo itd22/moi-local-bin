@@ -47,19 +47,34 @@ pdf-expand-linearize-all() {
 }
 
 
-pdf-sanitize-all() {
-  local print_time="${2:-false}" # Default to false if not provided
-  local start_time=$SECONDS
+pdf-sanitize-all () 
+{ 
+    local print_time="${2:-false}"
+    local start_time=$SECONDS
+    local targets=()
 
-  parallel -j+0    /bin/python $HOME/tools/pdfpz/pdf_sanitize.py {} ::: *-linearized.pdf || return
+    # Collect matching files that haven't been sanitized yet
+    for file in *-linearized.pdf; do
+        [[ -e "$file" ]] || continue
+        local sanitized="${file%.pdf}-sanitized.pdf"
+        if [[ ! -e "$sanitized" ]]; then
+            targets+=("$file")
+        fi
+    done
 
-  # Calculate and print elapsed time if requested
-  if [[ "$print_time" == "true" ]]; then
-    local elapsed=$((SECONDS - start_time))
-    echo "Process completed in ${elapsed} seconds."
-  fi
+    # Exit early if there are no new files to process
+    if (( ${#targets[@]} == 0 )); then
+        echo "No new files to sanitize." >&2
+        return 0
+    fi
+
+    parallel -j+0 /bin/python "$HOME/tools/pdfpz/pdf_sanitize.py" {} ::: "${targets[@]}" || return
+
+    if [[ "$print_time" == "true" ]]; then
+        local elapsed=$((SECONDS - start_time))
+        echo "Process completed in ${elapsed} seconds."
+    fi
 }
-
 
 
 qpdfc() {
