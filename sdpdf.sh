@@ -1,24 +1,3 @@
-pdf-expand-linearize-all() {
-  local print_time="${2:-false}" # Default to false if not provided
-  local start_time=$SECONDS
-
-  parallel -j+0 \
-    'qpdf --qdf \
-              --object-streams=disable \
-              --decode-level=all \
-              --stream-data=uncompress \
-              {} {.}-qdf.pdf' ::: *-sanitized.pdf || return
-
-  parallel -j+0 \
-    'qpdf --linearize \
-              {} {.}-linearized.pdf' && rm -f {} ::: *-qdf.pdf || return
-  # Calculate and print elapsed time if requested
-  if [[ "$print_time" == "true" ]]; then
-    local elapsed=$((SECONDS - start_time))
-    echo "Process completed in ${elapsed} seconds."
-  fi
-}
-
 pdf-expand-linearized() {
   local in="$1"
   local print_time="${2:-false}" # Default to false if not provided
@@ -44,6 +23,21 @@ pdf-expand-linearized() {
 
   qpdf --qdf --object-streams=disable --decode-level=generalized --stream-data=uncompress "$in" "$qdf"
   qpdf --linearize --object-streams=generate "$qdf" "$linearized"
+  rm -f  "$qdf"
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
+export -f  pdf-expand-linearized  
+
+pdf-expand-linearize-all() {
+  local print_time="${2:-false}" # Default to false if not provided
+  local start_time=$SECONDS
+
+  parallel -j+0   pdf-expand-linearized  ::: *.pdf || return
 
   # Calculate and print elapsed time if requested
   if [[ "$print_time" == "true" ]]; then
