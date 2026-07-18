@@ -14,3 +14,4 @@ alias okular-safe-tmp='  firejail \
     okular /home/sd/Documents/file.pdf'
 alias okular-netsnif='sudo firejail --join-network=safe_okular tcpdump -vv -n'
 alias okular-netloop-watch='firemon --name=safe_okular --netstats '
+alias python-format-project='ruff format . '
