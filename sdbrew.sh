@@ -1,3 +1,6 @@
+export HOMEBREW_ZSTD_THREADS=0 # fast decompress
+export HOMEBREW_NO_AUTO_UPDATE="1" # no autoupdate, usefull when there are built packages
+
 export HOMEBREW_MAKE_JOBS=$(nproc)
 export HOMEBREW_BOOTSTRAP_LDFLAGS="-fuse-ld=mold"
 export HOMEBREW_BOOTSTRAP_CXXFLAGS="-fuse-ld=mold -O3 -march=znver3 -mtune=znver3"
