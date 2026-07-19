@@ -20,8 +20,37 @@ if [ -n "$missing" ]; then
     echo "$missing"
     echo
     echo "Please run:"
-    echo "sudo dnf install$missing"
+    echo "sudo dnf install $missing"
 else
     echo "Packages installed:"
     echo "{{ range .dnf_packages }}{{ . }} {{ end }}"
 fi
+
+
+installed=""
+
+{{- range .dnf_downside }}
+
+PACKAGE="{{ . }}"
+
+if  rpm -q "$PACKAGE" >/dev/null 2>&1; then
+    installed="$installed $PACKAGE"
+fi
+
+{{- end }}
+
+if [ -n "$installed" ]; then
+    echo "Installed downside packages:"
+    echo "$installed"
+    echo
+    echo "Please run:"
+    echo "sudo dnf remove $installed"
+else
+    echo "Downside packages are not installed:"
+    echo "{{ range .dnf_downside }}{{ . }} {{ end }}"
+fi
+
+
+
+
+
