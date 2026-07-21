@@ -7,10 +7,23 @@ export HOMEBREW_BOOTSTRAP_CXXFLAGS="-fuse-ld=mold -O3 -march=znver3 -mtune=znver
 export HOMEBREW_BOOTSTRAP_CFLAGS="-fuse-ld=mold -O3 -march=znver3 -mtune=znver3"
 export HOMEBREW_TEMP="/tmp/homebrew-build"
 export HOMEBREW_NO_INSTALL_CLEANUP=1
+export HOMEBREW_NO_ENV_FILTERING=1 # to check
+export HOMEBREW_NO_ENV_FILTERING=1 # to check
+
 export LDFLAGS="-fuse-ld=mold"
 export CFLAGS="-O3 -march=znver3 -mtune=znver3"
 export CXXFLAGS="$CFLAGS"
-export HOMEBREW_NO_ENV_FILTERING=1 # to check
+# Rust
+export RUSTFLAGS="-C target-cpu=znver3 -C opt-level=3"
+export CARGO_BUILD_JOBS=$(nproc)
+export CARGO_PROFILE_RELEASE_LTO=thin
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+export CARGO_PROFILE_RELEASE_PANIC=abort
+
+# Go
+export GOAMD64=v3
+export GOFLAGS="-ldflags=-s -w"
+
 alias brew-install-fast='brew install  --force-bottle  '
 alias brew-install-build-optimized-TO_VERIFY-ALIAS='HOMEBREW_OPTIMIZATION_LEVEL=native HOMEBREW_ARCH=x86-64-v3 brew install --build-from-source '
 alias brew-installed-by-user='brew leaves > /tmp/brew-user_installed.txt '
