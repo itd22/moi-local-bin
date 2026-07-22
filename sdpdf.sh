@@ -1,4 +1,11 @@
-pdf-expand-linearized() {
+# /mnt/shared/pdf-parser.py -a -f --regex --search="/(JS|#4a#53|#4aS|J#53)\b" eff-ps.pdf
+# /mnt/shared/pdf-parser.py -a -f eff-ps.pdf | rg -i "^\s*/(JS|#4a#53|#4aS|J#53|JavaScript|#4a#61#76#61#53#63#72#69#70#74)\b"
+
+# gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile=output.ps input.pdf
+#gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=final.pdf output.ps
+
+
+pdf-expand-linearize() {
   local in="$1"
   local print_time="${2:-false}" # Default to false if not provided
 
@@ -31,13 +38,79 @@ pdf-expand-linearized() {
   fi
 }
 
-export -f  pdf-expand-linearized  
+export -f  pdf-expand-linearize  
+pdf-ps-pdf() {
+  local in="$1"
+  local print_time="${2:-false}" # Default to false if not provided
 
-pdf-expand-linearize-all() {
+  # Check if a file name was given
+  if [[ -z "$in" ]]; then
+    echo "Error: No file name provided." >&2
+    echo "Usage: pdf-expand-linearized <input.pdf> [true|false]" >&2
+    return 1
+  fi
+
+  # Check if the file actually exists and is a PDF
+  if [[ ! -f "$in" || "$in" != *.pdf ]]; then
+    echo "Error: File '$in' not found or is not a .pdf file." >&2
+    return 1
+  fi
+
+  local psf="${in%.pdf}.ps"
+  local outpdf="${in%.pdf}-ps.pdf"
+
+  # Record start time using the internal SECONDS counter
+  local start_time=$SECONDS
+
+  mutool draw -F ps -o $psf $in
+  ps2pdf $psf $outpdf 
+  rm -f  "$psf"
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+pdf-expand-sanitize() {
+  local in="$1"
+  local print_time="${2:-false}" # Default to false if not provided
+
+  # Check if a file name was given
+  if [[ -z "$in" ]]; then
+    echo "Error: No file name provided." >&2
+    echo "Usage: pdf-expand-linearized <input.pdf> [true|false]" >&2
+    return 1
+  fi
+
+  # Check if the file actually exists and is a PDF
+  if [[ ! -f "$in" || "$in" != *.pdf ]]; then
+    echo "Error: File '$in' not found or is not a .pdf file." >&2
+    return 1
+  fi
+
+  local sanitized="${in%.pdf}-sanitized.pdf"
+  local qdf="${in%.pdf}-qdf.pdf"
+
+  # Record start time using the internal SECONDS counter
+  local start_time=$SECONDS
+  qpdf --qdf --object-streams=disable --decode-level=generalized --stream-data=uncompress "$in" "$qdf"
+  /bin/python3 /home/sd/tools/pdfpz/pdf_sanitize.py   "$qdf"
+  rm -f  "$qdf"
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
+export -f  pdf-expand-sanitize
+
+
+pdf-expand-sanitize-all() {
   local print_time="${2:-false}" # Default to false if not provided
   local start_time=$SECONDS
 
-  parallel -j+0   pdf-expand-linearized  ::: *.pdf || return
+  parallel -j+0   pdf-expand-sanitize  ::: *.pdf || return
 
   # Calculate and print elapsed time if requested
   if [[ "$print_time" == "true" ]]; then
@@ -46,9 +119,33 @@ pdf-expand-linearize-all() {
   fi
 }
 
+pdf-expand-linearize-all() {
+  local print_time="${2:-false}" # Default to false if not provided
+  local start_time=$SECONDS
 
-pdf-sanitize-all () 
-{ 
+  parallel -j+0   pdf-expand-linearize  ::: *.pdf || return
+
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
+pdf-didier-scan-all() {
+  local print_time="${2:-false}" # Default to false if not provided
+  local start_time=$SECONDS
+
+  parallel -j+0   /bin/python /home/sd/.local/bin/scan_report_didier.py  ::: *.pdf || return
+
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
+pdf-sanitize-all (){ 
     local print_time="${2:-false}"
     local start_time=$SECONDS
     local targets=()
