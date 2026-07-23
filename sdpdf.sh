@@ -26,17 +26,46 @@ pdf-expand-search() {
   # Fixed line 24 with proper variable quoting
   awk '/^[0-9]+ [0-9]+ obj/{flag=1} flag; /^[[:space:]]*stream[[:space:]]*$/{flag=0; print "endobj\n"}' "$expanded" > "$pdf_objects"
 
-  # Fixed line 41 with proper variable quoting
+  local expanded="${1%.pdf}-qdf.pdf"
+  local pdf_objects="${1%.pdf}-objects.txt"
+  local pdf_objects_no_kids="${1%.pdf}-objects-no_kids.txt"
+
+  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
+
+  # Removes CropBox and MediaBox arrays while preserving structure
   awk '
-  /^[0-9]+ [0-9]+ obj/ { flag=1; in_kids=0 }
+  /^[0-9]+ [0-9]+ obj/ { flag=1 }
+  flag && /\/(CropBox|MediaBox) *\[/ { in_box=1; next }
+  in_box { if (/\]/) in_box=0; next }
+  flag && !in_box
+  flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
+  ' "${expanded}" > "${pdf_objects}"
+
+  local expanded="${1%.pdf}-qdf.pdf"
+  local pdf_objects="${1%.pdf}-objects.txt"
+  local pdf_objects_no_kids="${1%.pdf}-objects-no_kids.txt"
+
+  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
+
+  # Removes CropBox and MediaBox arrays while preserving structure
+  awk '
+  /^[0-9]+ [0-9]+ obj/ { flag=1 }
+  flag && /\/(CropBox|MediaBox) *\[/ { in_box=1; next }
+  in_box { if (/\]/) in_box=0; next }
+  flag && !in_box
+  flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
+  ' "${expanded}" > "${pdf_objects}"
+
+  awk '
+  /^[0-9]+ [0-9]+ obj/ { flag=1; in_kids=0; in_box=0 }
   flag && /\/Kids *\[/ { in_kids=1; next }
   in_kids { if (/\]/) in_kids=0; next }
-  flag && !in_kids
+  flag && /\/(CropBox|MediaBox) *\[/ { in_box=1; next }
+  in_box { if (/\]/) in_box=0; next }
+  flag && !in_kids && !in_box
   flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
-  flag && /^[[:space:]]*endobj/ { flag=0 }
-  ' "$expanded" > "$pdf_objects_no_kids"
+  flag && /^[[:space:]]*endobj/ { flag=0 }' "${expanded}" > "${pdf_objects_no_kids}"
 
-  # Fixed multi-line regex formatting and variable quoting
   rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "$pdf_objects"
 }
 
