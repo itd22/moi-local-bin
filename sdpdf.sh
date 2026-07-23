@@ -16,57 +16,21 @@ pdf-expand-search() {
     echo "Error: File '$in' not found or is not a .pdf file." >&2
     return 1
   fi
-  local expanded="${in%.pdf}-qdf.pdf"
-  local pdf_objects="${in%.pdf}-objects.txt"
-  local pdf_objects_no_kids="${in%.pdf}-objects-no_kids.txt"
-
-  # Protect against spaces in input arguments
-  qpdf --qdf --object-streams=disable --decrypt "$1" "$expanded"
-
-  # Fixed line 24 with proper variable quoting
-  awk '/^[0-9]+ [0-9]+ obj/{flag=1} flag; /^[[:space:]]*stream[[:space:]]*$/{flag=0; print "endobj\n"}' "$expanded" > "$pdf_objects"
-
+  
   local expanded="${1%.pdf}-qdf.pdf"
   local pdf_objects="${1%.pdf}-objects.txt"
   local pdf_objects_no_kids="${1%.pdf}-objects-no_kids.txt"
 
-  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
+#  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
+awk '/^[0-9]+ [0-9]+ obj/ { flag=1 } flag; /^[ \t]*stream[ \t]*$/ { flag=0; print "endobj\n" }' "${expanded}" > "${pdf_objects}"
 
-  # Removes CropBox and MediaBox arrays while preserving structure
-  awk '
-  /^[0-9]+ [0-9]+ obj/ { flag=1 }
-  flag && /\/(CropBox|MediaBox) *\[/ { in_box=1; next }
-  in_box { if (/\]/) in_box=0; next }
-  flag && !in_box
-  flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
-  ' "${expanded}" > "${pdf_objects}"
+  # wrong remove all content rg -U -P -v '(?ms)^[ \t]*stream[ \t]*\n.*?(?=^[ \t]*endobj)' "${expanded}" > "${pdf_objects}"
 
-  local expanded="${1%.pdf}-qdf.pdf"
-  local pdf_objects="${1%.pdf}-objects.txt"
-  local pdf_objects_no_kids="${1%.pdf}-objects-no_kids.txt"
 
-  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
+  rg -U -v '(?s)\/Kids\s*\[[^\]]*\]|\/(CropBox|MediaBox)\s*\[[^\]]*\]|\/Font\s*<<[^>]*>>|(?ms)^[ \t]*stream[ \t]*\n.*?^[ \t]*endobj' "${pdf_objects}" > "${pdf_objects_no_kids}"
 
-  # Removes CropBox and MediaBox arrays while preserving structure
-  awk '
-  /^[0-9]+ [0-9]+ obj/ { flag=1 }
-  flag && /\/(CropBox|MediaBox) *\[/ { in_box=1; next }
-  in_box { if (/\]/) in_box=0; next }
-  flag && !in_box
-  flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
-  ' "${expanded}" > "${pdf_objects}"
+  rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects_no_kids}"
 
-  awk '
-  /^[0-9]+ [0-9]+ obj/ { flag=1; in_kids=0; in_box=0 }
-  flag && /\/Kids *\[/ { in_kids=1; next }
-  in_kids { if (/\]/) in_kids=0; next }
-  flag && /\/(CropBox|MediaBox) *\[/ { in_box=1; next }
-  in_box { if (/\]/) in_box=0; next }
-  flag && !in_kids && !in_box
-  flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
-  flag && /^[[:space:]]*endobj/ { flag=0 }' "${expanded}" > "${pdf_objects_no_kids}"
-
-  rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "$pdf_objects"
 }
 
 export -f pdf-expand-search
