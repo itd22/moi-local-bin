@@ -4,7 +4,10 @@
 # gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile=output.ps input.pdf
 #gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=final.pdf output.ps
 
-pdf-expand-search() {
+
+
+
+pdf-suspects-inspect() {
   local in="$1"
   if [[ -z "$in" ]]; then
     echo "Error: No file name provided." >&2
@@ -38,15 +41,60 @@ awk '/^[0-9]+ [0-9]+ obj/ { flag=1 } flag; /^[ \t]*stream[ \t]*$/ { flag=0; prin
  mv "$last_file" "$pdf_last_page"
  ls -v temp_split_* | xargs cat >  "$pdf_until_last_page"
   rm temp_split_*
-rg -a -U -v '(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n(?:[^\n]*\n)*?[^\n]*\/BaseFont.*?endobj|(?m)^[0-9]{10} [0-9]{5} [nf][\r\n]*' "${pdf_last_page}" > "${pdf_last_page_no_font}"
 
-# rg -U -v '(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n(?:[^\n]*\n)*?[^\n]*\/BaseFont.*?endobj' "${pdf_last_page}" > "${pdf_last_page_no_font}"
- 
- rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects_no_kids}"
+
+#rg -a -U -v '(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n(?:[^\n]*\n)*?[^\n]*\/BaseFont.*?endobj|(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n(?:[^\n]*\n)*?[^\n]*\/CIDFontType0C.*?endobj|(?m)^[0-9]+ [0-9]+ obj\n[0-9]+[\r\n]+endobj|(?m)^[0-9]{10} [0-9]{5} [nf][\r\n]*|(?m)^[ \t]*[\r\n]+' "${pdf_last_page}" > "${pdf_last_page_no_font}"
+rg -a -U -v '(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n<<.*?\/(BaseFont|CIDFontType0C).*?>>\nendobj|(?m)^[0-9]+ [0-9]+ obj\n[0-9]+[\r\n]+endobj|(?m)^[0-9]{10} [0-9]{5} [nf][\r\n]*|(?m)^[ \t]*[\r\n]+' "${pdf_last_page}" > "${pdf_last_page_no_font}"
+
+# TODO check  CIDFontType0C
+
+
+ rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects}"
 
 }
 
-export -f pdf-expand-search
+pdf-suspects-search() {
+  local in="$1"
+  if [[ -z "$in" ]]; then
+    echo "Error: No file name provided." >&2
+    echo "Usage: pdf-expand-linearized <input.pdf> [true|false]" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$in" || "$in" != *.pdf ]]; then
+    echo "Error: File '$in' not found or is not a .pdf file." >&2
+    return 1
+  fi
+  
+  local expanded="${1%.pdf}-qdf.pdf"
+  local pdf_objects="${1%.pdf}-objects.txt"
+  
+  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
+awk '/^[0-9]+ [0-9]+ obj/ { flag=1 } flag; /^[ \t]*stream[ \t]*$/ { flag=0; print "endobj\n" }' "${expanded}" > "${pdf_objects}"
+
+  # wrong remove all content rg -U -P -v '(?ms)^[ \t]*stream[ \t]*\n.*?(?=^[ \t]*endobj)' "${expanded}" > "${pdf_objects}"
+
+
+ rg -H -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects}"
+
+rm -f "${pdf_objects}"  "$expanded"
+}
+
+export -f pdf-suspects-search
+
+pdf-suspects-search-all() {
+  local print_time="${2:-false}" # Default to false if not provided
+  local start_time=$SECONDS
+
+  parallel -j+0   pdf-suspects-search  ::: *.pdf || return
+
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
 
 pdf-expand-linearize() {
   local in="$1"
