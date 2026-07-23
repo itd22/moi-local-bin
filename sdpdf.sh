@@ -26,8 +26,8 @@ awk '/^[0-9]+ [0-9]+ obj/ { flag=1 } flag; /^[ \t]*stream[ \t]*$/ { flag=0; prin
 
   # wrong remove all content rg -U -P -v '(?ms)^[ \t]*stream[ \t]*\n.*?(?=^[ \t]*endobj)' "${expanded}" > "${pdf_objects}"
 
+rg -U -v '(?s)\/Kids\s*\[[^\]]*\]|\/(CropBox|MediaBox)\s*\[[^\]]*\]|\/(Font|XObject)\s*<<[^>]*>>|(?ms)^[ \t]*stream[ \t]*\n.*?^[ \t]*endobj' "${pdf_objects}" > "${pdf_objects_no_kids}"
 
-  rg -U -v '(?s)\/Kids\s*\[[^\]]*\]|\/(CropBox|MediaBox)\s*\[[^\]]*\]|\/Font\s*<<[^>]*>>|(?ms)^[ \t]*stream[ \t]*\n.*?^[ \t]*endobj' "${pdf_objects}" > "${pdf_objects_no_kids}"
 
   rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects_no_kids}"
 
