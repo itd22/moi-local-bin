@@ -20,16 +20,29 @@ pdf-expand-search() {
   local expanded="${1%.pdf}-qdf.pdf"
   local pdf_objects="${1%.pdf}-objects.txt"
   local pdf_objects_no_kids="${1%.pdf}-objects-no_kids.txt"
-
+  local pdf_last_page="${1%.pdf}-last-page.txt"
+  local pdf_last_page_no_font="${1%.pdf}-last-page-no-font.txt"
+  local pdf_until_last_page="${1%.pdf}-until_last-page.txt"
+  
 #  qpdf --qdf --object-streams=disable --decrypt "$1" "${expanded}"
 awk '/^[0-9]+ [0-9]+ obj/ { flag=1 } flag; /^[ \t]*stream[ \t]*$/ { flag=0; print "endobj\n" }' "${expanded}" > "${pdf_objects}"
 
   # wrong remove all content rg -U -P -v '(?ms)^[ \t]*stream[ \t]*\n.*?(?=^[ \t]*endobj)' "${expanded}" > "${pdf_objects}"
 
-rg -U -v '(?s)\/Kids\s*\[[^\]]*\]|\/(CropBox|MediaBox)\s*\[[^\]]*\]|\/(Font|XObject)\s*<<[^>]*>>|(?ms)^[ \t]*stream[ \t]*\n.*?^[ \t]*endobj' "${pdf_objects}" > "${pdf_objects_no_kids}"
+ rg -U -v '(?s)\/Kids\s*\[[^\]]*\]|\/(CropBox|MediaBox)\s*\[[^\]]*\]|\/(Font|XObject)\s*<<[^>]*>>|(?ms)^[ \t]*stream[ \t]*\n.*?^[ \t]*endobj' "${pdf_objects}" > "${pdf_objects_no_kids}"
 
+ csplit -s -z -k "$pdf_objects_no_kids" '/Page/' '{*}' -f "temp_split_"
 
-  rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects_no_kids}"
+ files=(temp_split_*)
+ last_file=$(ls -v temp_split_* | tail -n 1)
+ mv "$last_file" "$pdf_last_page"
+ ls -v temp_split_* | xargs cat >  "$pdf_until_last_page"
+  rm temp_split_*
+rg -a -U -v '(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n(?:[^\n]*\n)*?[^\n]*\/BaseFont.*?endobj|(?m)^[0-9]{10} [0-9]{5} [nf][\r\n]*' "${pdf_last_page}" > "${pdf_last_page_no_font}"
+
+# rg -U -v '(?ms)(?:%% Original object ID:[^\n]*\n)?[0-9]+ [0-9]+ obj\n(?:[^\n]*\n)*?[^\n]*\/BaseFont.*?endobj' "${pdf_last_page}" > "${pdf_last_page_no_font}"
+ 
+ rg -i '/(J(S\b|#53\b)|A(A\b|#41\b)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' "${pdf_objects_no_kids}"
 
 }
 
