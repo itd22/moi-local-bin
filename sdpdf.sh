@@ -4,6 +4,46 @@
 # gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile=output.ps input.pdf
 #gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=final.pdf output.ps
 
+pdf-expand-search() {
+  local in="$1"
+  if [[ -z "$in" ]]; then
+    echo "Error: No file name provided." >&2
+    echo "Usage: pdf-expand-linearized <input.pdf> [true|false]" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$in" || "$in" != *.pdf ]]; then
+    echo "Error: File '$in' not found or is not a .pdf file." >&2
+    return 1
+  fi
+
+  local expanded="${in%.pdf}-qdf.pdf"
+  local pdf_objects="${in%.pdf}-objects.txt"
+  local pdf_objects_no_kids="${in%.pdf}-objects-no_kids.txt"
+  qpdf --qdf --object-streams=disable --decrypt "$1" "$expanded"
+  awk '/^[0-9]+ [0-9]+ obj/{flag=1} flag; /stream/{flag=0; print "endobj\n"}' "$expanded" > "$pdf_objects"
+awk '
+# 1. Match the exact start of any object block
+/^[0-9]+ [0-9]+ obj/ { flag=1; in_kids=0 }
+
+# 2. Handle /Kids multi-line removal if it appears
+flag && /\/Kids *\[/ { in_kids=1; next }
+in_kids { if (/\]/) in_kids=0; next }
+
+# 3. Print structural content only when inside a valid block
+flag && !in_kids
+
+# 4. Stop printing strictly at a standalone binary stream marker
+flag && /^[[:space:]]*stream[[:space:]]*$/ { flag=0; print "endobj\n" }
+
+# 5. Reset flag naturally at an endobj marker if no stream exists
+flag && /^[[:space:]]*endobj/ { flag=0 }
+' "$expanded" >  $pdf_objects_no_kids
+
+  rg -i '/(J(S|#53)|A(A|#41)|java_?script|open_?action|a(cro_?form|#63#72#6f#46#6f#72#6d)|launch|embeddedfile|encrypt)' $pdf_objects
+}
+
+export -f pdf-expand-search
 
 pdf-expand-linearize() {
   local in="$1"
