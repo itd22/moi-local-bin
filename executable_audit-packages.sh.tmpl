@@ -1,7 +1,11 @@
 #!/bin/sh
 # Manual DNF package checker
 # Run:
-#   ~/.local/bin/check-dnf-packages
+#   ~/.local/bin/audit-dnf-packages
+
+echo "Security packages to install:"
+sudo dnf updateinfo list security --setopt=excludepkgs=
+sudo dnf updateinfo list security 
 
 missing=""
 
