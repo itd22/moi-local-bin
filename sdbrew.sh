@@ -27,6 +27,7 @@ export GOFLAGS="-ldflags=-s -w"
 alias brew-install-fast='brew install  --force-bottle  '
 alias brew-install-build-optimized-TO_VERIFY-ALIAS='HOMEBREW_OPTIMIZATION_LEVEL=native HOMEBREW_ARCH=x86-64-v3 brew install --build-from-source '
 alias brew-installed-by-user='brew leaves > /tmp/brew-user_installed.txt '
+alias brew-uninstall-ignore-deps='brew uninstall --ignore-dependencies '
 alias brew-prefix='brew --prefix '
 alias brew-cleanall='brew cleanup -s --verbose ;  brew cleanup --prune=all ; brew uninstall   $(brew list); brew doctor '
 alias brew-clean-emptied='brew cleanup -s --verbose ;  brew cleanup --prune=all ; brew doctor '
