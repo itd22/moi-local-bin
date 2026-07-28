@@ -2,8 +2,13 @@
 # /mnt/shared/pdf-parser.py -a -f eff-ps.pdf | rg -i "^\s*/(JS|#4a#53|#4aS|J#53|JavaScript|#4a#61#76#61#53#63#72#69#70#74)\b"
 
 # gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile=output.ps input.pdf
-#gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=final.pdf output.ps
+# gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=final.pdf output.ps
 
+# remove paper shade method 1
+# gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dFILTERIMAGE=true -sOutputFile=drawings_only.pdf input.pdf
+
+# remove paper shade method 2
+# gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -dNoPatternObject=true -sOutputFile=temp.ps input.pdf && gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=drawings_only.pdf temp.ps && rm temp.ps
 
 
 
