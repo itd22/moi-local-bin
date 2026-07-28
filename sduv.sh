@@ -18,6 +18,9 @@ uvrp() {
   uv run python "$@"
  } 
 
+# for shell scripts
+export uvp
+export uvrp
 
 alias uvenv='uvp venv && uv sync --compile-bytecode ' 
 
