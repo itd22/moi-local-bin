@@ -156,8 +156,9 @@ pdf-ps-pdf() {
 
   # Record start time using the internal SECONDS counter
   local start_time=$SECONDS
-  gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile="$psf"  "$in"
-  gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile="$outpdf" "$psf"
+gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -dSAFER -dFILTERIMAGE=false -dNoFormObject=true -dNoPatternObject=true -dCompressPages=false -sOutputFile="$psf"  "$in"
+
+  gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 -dPDFSETTINGS=/ebook -dFastWebView=true -sOutputFile="$outpdf" "$psf"
 
   rm -f  "$psf"
   # Calculate and print elapsed time if requested
