@@ -1,5 +1,11 @@
-# Removes large background paper shadow images from hybrid PDFs based on byte size inspection.
-# Preserves selectable text and small diagram images/logos under the specified threshold.
+#!/bin/bash
+
+# --- CONFIGURATION ---
+# Define "large image" threshold in bytes (e.g., 51200 bytes = 50KB)
+SIZE_THRESHOLD=51200
+TEMP_QDF="repaired_structure_tmp.qdf"
+
+# --- THE FUNCTION ---
 remove_pdf_shadows_inspected() {
     if [ "$#" -ne 2 ]; then
         echo "Error: Wrong number of arguments." >&2
@@ -9,14 +15,11 @@ remove_pdf_shadows_inspected() {
 
     local input_file="$1"
     local output_file="$2"
-    local temp_qdf="repaired_structure.qdf"
-    
-    # Define "large image" threshold in bytes (e.g., 51200 bytes = 50KB)
-    # Background paper textures are usually hundreds of KB or several MB.
-    local size_threshold=51200 
+    local temp_qdf="$TEMP_QDF"
+    local size_threshold="$SIZE_THRESHOLD"
 
-    for cmd in qpdf sed fix-qdf; do
-        if ! command -v "$cmd" &> /dev/null; then
+    for cmd in qpdf sed fix-qdf awk grep cp rm; do
+        if ! command -v "$cmd" &>/dev/null; then
             echo "Error: Required tool '$cmd' is not installed." >&2
             return 1
         fi
@@ -29,26 +32,23 @@ remove_pdf_shadows_inspected() {
 
     echo "=== Step 1: Inspecting PDF Image Objects ==="
     
-    # Extract object numbers, types, and uncompressed stream lengths from qpdf
-    # Filter for image XObjects and extract their ID and length
     local large_objects=()
     
     while read -r obj_id length; do
-        if [ "$length" -gt "$size_threshold" ]; then
+        if [ -n "$length" ] && [ "$length" -gt "$size_threshold" ]; then
             echo "Found LARGE background object candidate: ID $obj_id ($length bytes)"
             large_objects+=("$obj_id")
-        else
+        elif [ -n "$length" ]; then
             echo "Preserving small diagram/logo object: ID $obj_id ($length bytes)"
         fi
     done < <(qpdf --show-pages "$input_file" --with-images 2>/dev/null | \
              grep -E "images:" -A 20 | grep -E "obj [0-9]+" | \
              awk '{print $4, $6}' | sed 's/[^0-9 ]//g')
 
-    # If no large background objects are found, default to scanning the raw stream objects
     if [ ${#large_objects[@]} -eq 0 ]; then
         echo "Direct image mapping empty. Scanning raw stream objects..."
         while read -r obj_id length; do
-            if [ "$length" -gt "$size_threshold" ]; then
+            if [ -n "$length" ] && [ "$length" -gt "$size_threshold" ]; then
                 echo "Found LARGE raw stream object candidate: ID $obj_id ($length bytes)"
                 large_objects+=("$obj_id")
             fi
@@ -64,13 +64,11 @@ remove_pdf_shadows_inspected() {
     fi
 
     echo "=== Step 2: Building Targeted Deletion Filter ==="
-    # Construct a dynamically generated sed regex matching only the large object references
     local sed_filter=""
     for id in "${large_objects[@]}"; do
         echo "Targeting Object ID $id for complete extraction removal."
         sed_filter+="/\/Im${id}[^0-9]/d; /\/R${id}[^0-9]/d; "
     done
-    # Append global structural catch filters to ensure the Do drawing command drops
     sed_filter+="/\/XObject/d; /Do/d"
 
     echo "=== Step 3: Executing Structural Purification ==="
@@ -93,4 +91,21 @@ remove_pdf_shadows_inspected() {
         return 1
     fi
 }
+
+# --- MAIN EXECUTION BLOCK ---
+
+# Check that the single required parameter was provided
+if [ "$#" -ne 1 ]; then
+    echo "Error: Missing input file path parameter." >&2
+    echo "Usage: $0 <path_to_pdf>" >&2
+    exit 1
+fi
+
+INPUT_PATH="$1"
+# Dynamically append '-clean.pdf' to the output name
+OUTPUT_PATH="${INPUT_PATH%.*}-clean.pdf"
+
+# Call the function using the positional script parameter
+remove_pdf_shadows_inspected "$INPUT_PATH" "$OUTPUT_PATH"
+exit $?
 
