@@ -151,14 +151,14 @@ pdf-ps-pdf() {
     return 1
   fi
 
-  local psf="${in%.pdf}.ps"
-  local outpdf="${in%.pdf}-ps.pdf"
+  local psf="../ps/${in%.pdf}.ps"
+  local outpdf="../ps/${in}"
 
   # Record start time using the internal SECONDS counter
   local start_time=$SECONDS
+  gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile="$psf"  "$in"
+  gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile="$outpdf" "$psf"
 
-  mutool draw -F ps -o $psf $in
-  ps2pdf $psf $outpdf 
   rm -f  "$psf"
   # Calculate and print elapsed time if requested
   if [[ "$print_time" == "true" ]]; then
@@ -166,6 +166,21 @@ pdf-ps-pdf() {
     echo "Process completed in ${elapsed} seconds."
   fi
 }
+export -f pdf-ps-pdf
+pdf-ps-pdf-all() {
+  local print_time="${2:-false}" # Default to false if not provided
+  local start_time=$SECONDS
+
+  parallel -j+0   pdf-ps-pdf ::: *.pdf || return
+
+  # Calculate and print elapsed time if requested
+  if [[ "$print_time" == "true" ]]; then
+    local elapsed=$((SECONDS - start_time))
+    echo "Process completed in ${elapsed} seconds."
+  fi
+}
+
+
 pdf-expand-sanitize() {
   local in="$1"
   local print_time="${2:-false}" # Default to false if not provided
