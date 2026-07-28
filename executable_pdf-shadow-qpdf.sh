@@ -1,15 +1,74 @@
 #!/bin/bash
 
-# --- CONFIGURATION ---
-# Define "large image" threshold in bytes (e.g., 51200 bytes = 50KB)
-SIZE_THRESHOLD=51200
+# --- DEFAULT FALLBACK CONFIGURATION ---
+DEFAULT_THRESHOLD=5000     # Dropped default to ~5KB to catch smaller embedded textures
+DEFAULT_SUFFIX="-clean"
 TEMP_QDF="repaired_structure_tmp.qdf"
+
+# --- HELP MENU ---
+show_help() {
+    echo "Usage: $0 [options] <path_to_pdf>"
+    echo "Options:"
+    echo "  -t, --threshold <bytes>   Min byte size of shadow to remove (Default: $DEFAULT_THRESHOLD)"
+    echo "  -s, --suffix <string>     Suffix for output filename (Default: $DEFAULT_SUFFIX)"
+    echo "  -h, --help                Show this help menu"
+    exit 0
+}
+
+# --- INITIALIZE VARIABLE CONFIGURATIONS ---
+SIZE_THRESHOLD="$DEFAULT_THRESHOLD"
+SUFFIX="$DEFAULT_SUFFIX"
+INPUT_PATH=""
+
+# --- PARSE COMMAND LINE ARGUMENTS ---
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -t|--threshold)
+            if [[ "$2" =~ ^[0-9]+$ ]]; then
+                SIZE_THRESHOLD="$2"
+                shift 2
+            else
+                echo "Error: Threshold must be a positive integer." >&2
+                exit 1
+            fi
+            ;;
+        -s|--suffix)
+            if [[ -n "$2" ]]; then
+                SUFFIX="$2"
+                shift 2
+            else
+                echo "Error: Suffix string cannot be empty." >&2
+                exit 1
+            fi
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        -*)
+            echo "Error: Unknown option $1" >&2
+            echo "Use -h or --help for instructions." >&2
+            exit 1
+            ;;
+        *)
+            INPUT_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check that the file parameter was captured
+if [[ -z "$INPUT_PATH" ]]; then
+    echo "Error: Missing input file path parameter." >&2
+    show_help
+fi
+
+# Dynamically construct the configurable output target name
+OUTPUT_PATH="${INPUT_PATH%.*}${SUFFIX}.pdf"
 
 # --- THE FUNCTION ---
 remove_pdf_shadows_inspected() {
     if [ "$#" -ne 2 ]; then
         echo "Error: Wrong number of arguments." >&2
-        echo "Usage: remove_pdf_shadows_inspected <input.pdf> <output.pdf>" >&2
         return 1
     fi
 
@@ -20,7 +79,7 @@ remove_pdf_shadows_inspected() {
 
     for cmd in qpdf sed fix-qdf awk grep cp rm; do
         if ! command -v "$cmd" &>/dev/null; then
-            echo "Error: Required tool '$cmd' is not installed." >&2
+            echo "Error: Required system tool '$cmd' is not installed." >&2
             return 1
         fi
     done
@@ -30,30 +89,40 @@ remove_pdf_shadows_inspected() {
         return 1
     fi
 
+    echo "=== Configuration Diagnostics ==="
+    echo "Target Threshold Weight : $size_threshold bytes"
+    echo "Output Destination Mode  : $output_file"
+    echo "================================="
     echo "=== Step 1: Inspecting PDF Image Objects ==="
     
     local large_objects=()
     
+    # Improved multi-version robust parser regex to fetch sizes safely
     while read -r obj_id length; do
-        if [ -n "$length" ] && [ "$length" -gt "$size_threshold" ]; then
-            echo "Found LARGE background object candidate: ID $obj_id ($length bytes)"
-            large_objects+=("$obj_id")
-        elif [ -n "$length" ]; then
-            echo "Preserving small diagram/logo object: ID $obj_id ($length bytes)"
+        if [[ -n "$obj_id" && "$length" =~ ^[0-9]+$ ]]; then
+            if [ "$length" -gt "$size_threshold" ]; then
+                echo "Found LARGE background object candidate: ID $obj_id ($length bytes)"
+                large_objects+=("$obj_id")
+            else
+                echo "Preserving small diagram/logo object: ID $obj_id ($length bytes)"
+            fi
         fi
     done < <(qpdf --show-pages "$input_file" --with-images 2>/dev/null | \
-             grep -E "images:" -A 20 | grep -E "obj [0-9]+" | \
-             awk '{print $4, $6}' | sed 's/[^0-9 ]//g')
+             grep -E "images:" -A 30 | grep -E "obj [0-9]+" | \
+             awk '{for(i=1;i<=NF;i++) if($i=="obj") {print $(i+1), $(i+3)}}' | tr -d '(),[]a-zA-Z')
 
+    # Fallback Option: Scan raw streams cleanly with robust spacing detection
     if [ ${#large_objects[@]} -eq 0 ]; then
         echo "Direct image mapping empty. Scanning raw stream objects..."
         while read -r obj_id length; do
-            if [ -n "$length" ] && [ "$length" -gt "$size_threshold" ]; then
-                echo "Found LARGE raw stream object candidate: ID $obj_id ($length bytes)"
-                large_objects+=("$obj_id")
+            if [[ -n "$obj_id" && "$length" =~ ^[0-9]+$ ]]; then
+                if [ "$length" -gt "$size_threshold" ]; then
+                    echo "Found LARGE raw stream object candidate: ID $obj_id ($length bytes)"
+                    large_objects+=("$obj_id")
+                fi
             fi
         done < <(qpdf --show-objects "$input_file" 2>/dev/null | \
-                 grep -E "stream" | awk '{print $2, $4}' | sed 's/[^0-9 ]//g')
+                 grep -E "stream" | awk '{print $2, $4}' | tr -d '(),[]a-zA-Z:')
     fi
 
     if [ ${#large_objects[@]} -eq 0 ]; then
@@ -93,19 +162,6 @@ remove_pdf_shadows_inspected() {
 }
 
 # --- MAIN EXECUTION BLOCK ---
-
-# Check that the single required parameter was provided
-if [ "$#" -ne 1 ]; then
-    echo "Error: Missing input file path parameter." >&2
-    echo "Usage: $0 <path_to_pdf>" >&2
-    exit 1
-fi
-
-INPUT_PATH="$1"
-# Dynamically append '-clean.pdf' to the output name
-OUTPUT_PATH="${INPUT_PATH%.*}-clean.pdf"
-
-# Call the function using the positional script parameter
 remove_pdf_shadows_inspected "$INPUT_PATH" "$OUTPUT_PATH"
 exit $?
 
