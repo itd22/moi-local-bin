@@ -1,52 +1,96 @@
-# Deletes background raster images/shadows from hybrid PDFs using qpdf.
-# Requires: qpdf, sed, and fix-qdf (usually bundled together with qpdf).
-remove_pdf_shadows() {
-    # 1. Ensure exactly two arguments are provided
-    if [ "$#" -ne 2 ]; then
-        echo "Error: Wrong number of arguments." >&2
-        echo "Usage: remove_pdf_shadows <input.pdf> <output.pdf>" >&2
-        return 1
-    fi
+#!/bin/bash
 
-    local input_file="$1"
-    local output_file="$2"
-    local temp_qdf="repaired_structure.qdf"
+# --- DEFAULT FALLBACK CONFIGURATION ---
+DEFAULT_SUFFIX="-clean"
+TEMP_QDF="repaired_structure_tmp.qdf"
 
-    # 2. Check dependencies before executing
-    for cmd in qpdf sed fix-qdf; do
-        if ! command -v "$cmd" &> /dev/null; then
-            echo "Error: Required tool '$cmd' is not installed or not in PATH." >&2
-            return 1
-        fi
-    done
-
-    # 3. Verify input file existence
-    if [ ! -f "$input_file" ]; then
-        echo "Error: Input file '$input_file' not found." >&2
-        return 1
-    fi
-
-    echo "Processing structure..."
-
-    # 4. Execute the structural cleaning pipeline
-    if qpdf --qdf --object-streams=disable "$input_file" - | \
-       sed -E '/\/XObject/d; /\/Im[0-9]+/d; /Do/d' | \
-       fix-qdf > "$temp_qdf" 2>/dev/null; then
-        
-        # 5. Compile the final clean PDF binary
-        if qpdf "$temp_qdf" "$output_file"; then
-            echo "Success! Clean PDF generated at: $output_file"
-            rm -f "$temp_qdf"
-            return 0
-        else
-            echo "Error: Final qpdf structural reconstruction failed." >&2
-            rm -f "$temp_qdf"
-            return 1
-        fi
-    else
-        echo "Error: Stream decompression or text manipulation failed." >&2
-        rm -f "$temp_qdf"
-        return 1
-    fi
+# --- HELP MENU ---
+show_help() {
+    echo "Usage: $0 [options] <path_to_pdf>"
+    echo "Options:"
+    echo "  -s, --suffix <string>     Suffix for output filename (Default: $DEFAULT_SUFFIX)"
+    echo "  -h, --help                Show this help menu"
+    exit 0
 }
+
+# --- PARSE COMMAND LINE ARGUMENTS ---
+SUFFIX="$DEFAULT_SUFFIX"
+INPUT_PATH=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -s|--suffix)
+            if [[ -n "$2" ]]; then
+                SUFFIX="$2"
+                shift 2
+            else
+                echo "Error: Suffix string cannot be empty." >&2
+                exit 1
+            fi
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            INPUT_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check that the file parameter was captured
+if [[ -z "$INPUT_PATH" ]]; then
+    echo "Error: Missing input file path parameter." >&2
+    show_help
+fi
+
+# Dynamically construct the output target name
+OUTPUT_PATH="${INPUT_PATH%.*}${SUFFIX}.pdf"
+
+# --- DEPENDENCY CHECK ---
+for cmd in qpdf sed fix-qdf; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Error: Required system tool '$cmd' is not installed." >&2
+        exit 1
+    fi
+done
+
+if [ ! -f "$INPUT_PATH" ]; then
+    echo "Error: Input file '$INPUT_PATH' not found." >&2
+    exit 1
+fi
+
+echo "=== Configuration Diagnostics ==="
+echo "Target Book File        : $INPUT_PATH"
+echo "Output Destination Mode : $OUTPUT_PATH"
+echo "================================="
+
+echo "Step 1: Unpacking PDF structural object streams..."
+# We uncompress the object streams so text rendering rules are fully visible to sed
+if qpdf --qdf --object-streams=disable "$INPUT_PATH" - > "$TEMP_QDF" 2>/dev/null; then
+    
+    echo "Step 2: Stripping background shadow/pattern paint tokens..."
+    # Explicitly target internal structural dictionaries that paint background tints and gradients:
+    # - Drops references to external graphic object forms (/XObject, /Im0-9)
+    # - Purges inline background drawing operators (Do)
+    # - Blocks canvas pattern dictionary bindings (/Pattern)
+    sed -i.bak -E '/\/XObject/d; /\/Im[0-9]+/d; /\/Pattern/d; /Do/d' "$TEMP_QDF"
+
+    echo "Step 3: Rebuilding structural byte cross-references..."
+    # Re-align the edited text code stream back into a healthy binary PDF format
+    if fix-qdf < "$TEMP_QDF" 2>/dev/null | qpdf - "$OUTPUT_PATH"; then
+        echo "Success! Sanitize pass finished without pixel allocations."
+        echo "Cleaned textbook generated at: $OUTPUT_PATH"
+        rm -f "$TEMP_QDF" "${TEMP_QDF}.bak"
+        exit 0
+    else
+        echo "Error: Final structure compression or cross-reference validation failed." >&2
+        rm -f "$TEMP_QDF" "${TEMP_QDF}.bak"
+        exit 1
+    fi
+else
+    echo "Error: Initial object stream parsing failed." >&2
+    rm -f "$TEMP_QDF"
+    exit 1
+fi
 
