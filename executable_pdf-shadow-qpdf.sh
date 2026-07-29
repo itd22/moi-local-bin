@@ -70,21 +70,24 @@ echo "Step 1: Unpacking PDF structural streams to disk..."
 # Use explicit --qdf destination parameter instead of stdout streaming
 if qpdf --qdf --object-streams=disable "$INPUT_PATH" "$STAGE1_RAW" 2>/dev/null; then
     
-    echo "Step 2: Stripping background shadow/pattern paint tokens in-place..."
-    # Modifies the stage 1 unpacked file directly on your drive via internal buffer tracking
-    sed -i.bak -E '/\/XObject/d; /\/Im[0-9]+/d; /\/Pattern/d; /Do/d' "$STAGE1_RAW"
+    echo "Step 2: Isolating and nullifying background structural objects..."
+    # This edits the object references in-place on disk. It targets:
+    # 1. '/Type /Pattern' - Blocks vector pattern-tiling fills used for canvas shadows
+    # 2. '/Subtype /Form' - Breaks nested background containers (Form XObjects) that house tints
+    # 3. '/Group' - Destroys hidden layout transparency sheets holding color overlays
+    sed -i.bak -E '/\/Type \/Pattern/d; /\/Subtype \/Form/d; /\/Group/d' "$STAGE1_RAW"
 
     echo "Step 3: Rebuilding structural byte cross-references to intermediate asset..."
-    # fix-qdf natively accepts input and output file paths as trailing arguments without redirection
+    # fix-qdf accepts direct input and output file targets without redirection
     if fix-qdf "$STAGE1_RAW" "$STAGE3_FIXED" 2>/dev/null; then
         
-        echo "Step 4: Compiling final clean binary layout structure..."
-        # Compile the isolated fixed stage straight to its absolute final endpoint destination 
+        echo "Step 4: Compiling clean binary layout and purging orphan objects..."
+        # Compile stage 3 to output. qpdf automatically purges all the orphaned objects we detached
         if qpdf "$STAGE3_FIXED" "$OUTPUT_PATH"; then
             echo "Success! Sanitize pass completed with discrete file isolation."
             echo "Cleaned textbook generated at: $OUTPUT_PATH"
             
-            # Clean up all workspace assets
+            # Clean up all workspace assets safely
             rm -f "$STAGE1_RAW" "${STAGE1_RAW}.bak" "$STAGE3_FIXED"
             exit 0
         else
