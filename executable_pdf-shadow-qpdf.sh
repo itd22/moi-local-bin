@@ -2,7 +2,8 @@
 
 # --- DEFAULT FALLBACK CONFIGURATION ---
 DEFAULT_SUFFIX="-clean"
-TEMP_QDF="repaired_structure_tmp.qdf"
+STAGE1_RAW="stage1_unpacked.qdf"
+STAGE3_FIXED="stage3_rebuilt.qdf"
 
 # --- HELP MENU ---
 show_help() {
@@ -44,7 +45,7 @@ if [[ -z "$INPUT_PATH" ]]; then
     show_help
 fi
 
-# Dynamically construct the output target name
+# Dynamically construct the final output name
 OUTPUT_PATH="${INPUT_PATH%.*}${SUFFIX}.pdf"
 
 # --- DEPENDENCY CHECK ---
@@ -65,32 +66,39 @@ echo "Target Book File        : $INPUT_PATH"
 echo "Output Destination Mode : $OUTPUT_PATH"
 echo "================================="
 
-echo "Step 1: Unpacking PDF structural object streams..."
-# We uncompress the object streams so text rendering rules are fully visible to sed
-if qpdf --qdf --object-streams=disable "$INPUT_PATH" - > "$TEMP_QDF" 2>/dev/null; then
+echo "Step 1: Unpacking PDF structural streams to disk..."
+# Use explicit --qdf destination parameter instead of stdout streaming
+if qpdf --qdf --object-streams=disable "$INPUT_PATH" "$STAGE1_RAW" 2>/dev/null; then
     
-    echo "Step 2: Stripping background shadow/pattern paint tokens..."
-    # Explicitly target internal structural dictionaries that paint background tints and gradients:
-    # - Drops references to external graphic object forms (/XObject, /Im0-9)
-    # - Purges inline background drawing operators (Do)
-    # - Blocks canvas pattern dictionary bindings (/Pattern)
-    sed -i.bak -E '/\/XObject/d; /\/Im[0-9]+/d; /\/Pattern/d; /Do/d' "$TEMP_QDF"
+    echo "Step 2: Stripping background shadow/pattern paint tokens in-place..."
+    # Modifies the stage 1 unpacked file directly on your drive via internal buffer tracking
+    sed -i.bak -E '/\/XObject/d; /\/Im[0-9]+/d; /\/Pattern/d; /Do/d' "$STAGE1_RAW"
 
-    echo "Step 3: Rebuilding structural byte cross-references..."
-    # Re-align the edited text code stream back into a healthy binary PDF format
-    if fix-qdf < "$TEMP_QDF" 2>/dev/null | qpdf - "$OUTPUT_PATH"; then
-        echo "Success! Sanitize pass finished without pixel allocations."
-        echo "Cleaned textbook generated at: $OUTPUT_PATH"
-        rm -f "$TEMP_QDF" "${TEMP_QDF}.bak"
-        exit 0
+    echo "Step 3: Rebuilding structural byte cross-references to intermediate asset..."
+    # fix-qdf natively accepts input and output file paths as trailing arguments without redirection
+    if fix-qdf "$STAGE1_RAW" "$STAGE3_FIXED" 2>/dev/null; then
+        
+        echo "Step 4: Compiling final clean binary layout structure..."
+        # Compile the isolated fixed stage straight to its absolute final endpoint destination 
+        if qpdf "$STAGE3_FIXED" "$OUTPUT_PATH"; then
+            echo "Success! Sanitize pass completed with discrete file isolation."
+            echo "Cleaned textbook generated at: $OUTPUT_PATH"
+            
+            # Clean up all workspace assets
+            rm -f "$STAGE1_RAW" "${STAGE1_RAW}.bak" "$STAGE3_FIXED"
+            exit 0
+        else
+            echo "Error: Final structure binary generation failed." >&2
+            rm -f "$STAGE1_RAW" "${STAGE1_RAW}.bak" "$STAGE3_FIXED"
+            exit 1
+        fi
     else
-        echo "Error: Final structure compression or cross-reference validation failed." >&2
-        rm -f "$TEMP_QDF" "${TEMP_QDF}.bak"
+        echo "Error: fix-qdf structural rebuild pass failed." >&2
+        rm -f "$STAGE1_RAW" "${STAGE1_RAW}.bak"
         exit 1
     fi
 else
-    echo "Error: Initial object stream parsing failed." >&2
-    rm -f "$TEMP_QDF"
+    echo "Error: Step 1 expansion failed." >&2
     exit 1
 fi
 
